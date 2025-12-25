@@ -9,6 +9,7 @@ This repository is a lightweight Java-based Question Paper Management System (QP
 - **Enhanced Search**: Search using Subject, Academic Year, Exam Month, Year, and Semester
 - **Deployment Ready**: Complete deployment guide for production use
 - **Improved UI**: Better organization with new dropdown fields
+- **Added PDF upload**: Have to upload pdf instead of copying file name for adding papers.
 
 ## High-level architecture
 
