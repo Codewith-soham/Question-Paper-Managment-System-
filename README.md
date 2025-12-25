@@ -1,8 +1,14 @@
 ## Question Paper Management System — README
 
-This repository is a lightweight Java-based Question Paper Management System (QPMS). It uses plain Java for the backend, simple static HTML/CSS/vanilla JS for the frontend, MySQL as the persistence layer, and Jakarta Mail for SMTP email sending.
+This repository is a lightweight Java-based Question Paper Management System (QPMS) designed for college librarians. It uses plain Java for the backend, simple static HTML/CSS/vanilla JS for the frontend, MySQL as the persistence layer, and Jakarta Mail for SMTP email sending.
 
-This README documents the architecture, technology stack, where code lives, how to run the app (Windows), available scripts and endpoints, troubleshooting tips, and recommended next steps.
+## ✨ New Features (Version 2.0)
+
+- **Academic Year Field**: Track papers by academic year (1st Year, 2nd Year, 3rd Year, 4th Year)
+- **Exam Month Field**: Organize papers by exam month (May or December only)
+- **Enhanced Search**: Search using Subject, Academic Year, Exam Month, Year, and Semester
+- **Deployment Ready**: Complete deployment guide for production use
+- **Improved UI**: Better organization with new dropdown fields
 
 ## High-level architecture
 
@@ -18,12 +24,13 @@ This README documents the architecture, technology stack, where code lives, how 
 - `frontend/` — static UI files (HTML, CSS, `js/main.js`)
 - `lib/` — external jars used at runtime (mysql connector, jakarta.mail, jakarta.activation)
 - `PDF/` — place your attachment PDFs here
-- `run-main.bat`, `start-all.bat`, `src/run-launcher.bat` — convenience scripts to compile/run on Windows
-- `setup-database.sql` — SQL to create the required tables (run manually with mysql client)
+- `start-server.bat` — convenience script to compile/run on Windows
+- `setup-database.sql` — SQL to create the required tables with new fields
+- `DEPLOYMENT_GUIDE.md` — Complete deployment instructions for production
 
 ## Technology stack
 
-- Language/runtime: Java (JDK 8+ recommended)
+- Language/runtime: Java (JDK 11+ recommended)
 - HTTP server: com.sun.net.httpserver (JDK built-in)
 - DB: MySQL (server)
 - JDBC driver: mysql-connector-j (Connector/J jar)
@@ -31,11 +38,36 @@ This README documents the architecture, technology stack, where code lives, how 
 - Frontend: HTML, CSS, vanilla JavaScript (fetch API)
 - VCS: Git
 
+## 🚀 Quick Start
+
+### For Development
+
+1. **Setup Database**:
+   ```cmd
+   mysql -u root -p < setup-database.sql
+   ```
+
+2. **Configure Database Connection**:
+   Edit `src/DatabaseConnection.java` with your MySQL credentials
+
+3. **Start the Server**:
+   ```cmd
+   start-server.bat
+   ```
+
+4. **Access Application**:
+   Open browser to `http://localhost:8080/frontend/index.html`
+
+### For Production Deployment
+
+See [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) for complete deployment instructions.
+
 ## Important files to inspect
 
 - `src/WebServer.java` — routes static files and API endpoints. Key endpoints:
   - `GET /papers` — list papers (JSON)
-  - `POST /papers/add` — add paper (form data)
+  - `POST /papers/add` — add paper (includes academicYear and examMonth)
+  - `GET /papers/search` — search with all filters
   - `DELETE /papers/{id}` — delete paper by id
   - `POST /papers/{id}/email` — send paper by email
   - `GET /frontend/...` — static frontend files
@@ -43,6 +75,22 @@ This README documents the architecture, technology stack, where code lives, how 
 - `src/EmailService.java` — SMTP send logic and PDF resolution
 - `src/LaunchQPMS.java` — Java launcher (one-file) useful for VS Code Run
 - `frontend/js/main.js` — UI logic; fetches API, renders lists, sends email, delete button wired here
+
+## Database Schema
+
+```sql
+CREATE TABLE question_paper (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    subject VARCHAR(100) NOT NULL,
+    academic_year VARCHAR(20) NOT NULL,
+    exam_month VARCHAR(20) NOT NULL,
+    year INT NOT NULL,
+    semester INT NOT NULL,
+    file_path VARCHAR(255) NOT NULL,
+    status VARCHAR(50) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
 
 ## How the code runs (flow)
 
@@ -71,9 +119,9 @@ mysql -u root -p < setup-database.sql
 
 1) Quick start (one-click batch helper):
 
- - Double-click `start-all.bat` in the project root. This will:
-   - Ensure jars are present (downloads if your launcher does so), compile sources, and start the web server in a new console window.
-   - It prints a manual SQL command to run for DB setup (safer than auto-run).
+ - Double-click `start-server.bat` in the project root. This will:
+   - Compile sources, verify required jars, and start the web server.
+   - Follow the on-screen instructions for any missing dependencies.
 
 2) From VS Code (Run button):
 
@@ -87,9 +135,9 @@ javac -cp .;..\lib\* *.java
 java -cp .;..\lib\* WebServer
 ```
 
-4) Run the console `Main` (interactive console app):
+4) Alternative launcher:
 
- - Double-click `run-main.bat` in the project root (it compiles and runs `Main`).
+ - You can also run `LaunchQPMS` from your IDE to automatically download libs, setup DB, and start the server.
 
 ## Frontend usage
 
@@ -168,7 +216,4 @@ If you'd like, I can:
 - add a `pom.xml` or `build.gradle` to convert this to a Maven/Gradle build,
 - or add a small `health` endpoint and minimal tests.
 Tell me which and I'll implement it.
-<<<<<<< HEAD
-# Question-Paper-Managment-System-
-A  system used to add , view and send question papers via email to students .
-=======
+ 

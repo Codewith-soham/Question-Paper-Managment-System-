@@ -1,4 +1,5 @@
-// Manages saving and retrieving question paper data from files or storage
+// Manages saving and retrieving question paper data from database
+// Uses connection pooling for efficient resource management
 
 import java.sql.*;
 import java.util.ArrayList;
@@ -6,35 +7,42 @@ import java.util.List;
 
 public class QuestionPaperDAO {
 
-    public void addPaper(QuestionPaper paper) {
-        String query = "INSERT INTO question_paper (subject, year, semester, file_path, status) VALUES (?, ?, ?, ?, ?)";
+    public void addPaper(QuestionPaper paper) throws SQLException {
+        String query = "INSERT INTO question_paper (subject, academic_year, exam_month, year, semester, file_path, status) VALUES (?, ?, ?, ?, ?, ?, ?)";
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(query)) {
             ps.setString(1, paper.getSubject());
-            ps.setInt(2, paper.getYear());
-            ps.setInt(3, paper.getSemester());
-            ps.setString(4, paper.getFilePath());
-            ps.setString(5, paper.getStatus());
+            ps.setString(2, paper.getAcademicYear());
+            ps.setString(3, paper.getExamMonth());
+            ps.setInt(4, paper.getYear());
+            ps.setInt(5, paper.getSemester());
+            ps.setString(6, paper.getFilePath());
+            ps.setString(7, paper.getStatus());
             ps.executeUpdate();
-            System.out.println("Paper added successfully!");
+            System.out.println("✓ Paper added successfully: " + paper.getSubject());
         } catch (SQLException e) {
-            e.printStackTrace();
+            System.err.println("✗ Error adding paper: " + e.getMessage());
+            throw new SQLException("Failed to add paper: " + e.getMessage(), e);
         }
     }
 
-    public List<QuestionPaper> searchPaper(String subject, int year, int semester) {
+    public List<QuestionPaper> searchPaper(String subject, String academicYear, String examMonth, int year, int semester) throws SQLException {
         List<QuestionPaper> list = new ArrayList<>();
-        String query = "SELECT * FROM question_paper WHERE subject=? AND year=? AND semester=?";
+        String query = "SELECT * FROM question_paper WHERE subject=? AND academic_year=? AND exam_month=? AND year=? AND semester=?";
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(query)) {
             ps.setString(1, subject);
-            ps.setInt(2, year);
-            ps.setInt(3, semester);
+            ps.setString(2, academicYear);
+            ps.setString(3, examMonth);
+            ps.setInt(4, year);
+            ps.setInt(5, semester);
             ResultSet rs = ps.executeQuery();
             while (rs.next()) {
                 list.add(new QuestionPaper(
                         rs.getInt("id"),
                         rs.getString("subject"),
+                        rs.getString("academic_year"),
+                        rs.getString("exam_month"),
                         rs.getInt("year"),
                         rs.getInt("semester"),
                         rs.getString("file_path"),
@@ -49,7 +57,7 @@ public class QuestionPaperDAO {
 
     public List<QuestionPaper> viewAllPapers() {
         List<QuestionPaper> list = new ArrayList<>();
-        String query = "SELECT * FROM question_paper";
+        String query = "SELECT * FROM question_paper ORDER BY year DESC, semester DESC, created_at DESC";
         try (Connection conn = DatabaseConnection.getConnection();
              Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(query)) {
@@ -57,6 +65,8 @@ public class QuestionPaperDAO {
                 list.add(new QuestionPaper(
                         rs.getInt("id"),
                         rs.getString("subject"),
+                        rs.getString("academic_year"),
+                        rs.getString("exam_month"),
                         rs.getInt("year"),
                         rs.getInt("semester"),
                         rs.getString("file_path"),

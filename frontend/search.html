@@ -26,6 +26,24 @@
                 <input type="text" name="subject" placeholder="e.g., Maths" required>
             </div>
             <div class="form-field">
+                <label>Academic Year</label>
+                <select name="academicYear" required>
+                    <option value="">Select Academic Year</option>
+                    <option value="1st Year">1st Year</option>
+                    <option value="2nd Year">2nd Year</option>
+                    <option value="3rd Year">3rd Year</option>
+                    <option value="4th Year">4th Year</option>
+                </select>
+            </div>
+            <div class="form-field">
+                <label>Exam Month</label>
+                <select name="examMonth" required>
+                    <option value="">Select Exam Month</option>
+                    <option value="May">May</option>
+                    <option value="December">December</option>
+                </select>
+            </div>
+            <div class="form-field">
                 <label>Year</label>
                 <input type="number" name="year" placeholder="e.g., 2019" required min="1900" max="2100">
             </div>
@@ -54,6 +72,8 @@
                 <tr>
                     <th>ID</th>
                     <th>Subject</th>
+                    <th>Academic Year</th>
+                    <th>Exam Month</th>
                     <th>Year</th>
                     <th>Semester</th>
                     <th>Status</th>

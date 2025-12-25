@@ -3,6 +3,7 @@
 import java.util.*;
 import java.io.File;
 import java.awt.Desktop;
+import java.sql.SQLException;
 
 public class QuestionPaperService {
     private final QuestionPaperDAO dao = new QuestionPaperDAO();
@@ -10,7 +11,7 @@ public class QuestionPaperService {
     private final Scanner sc = new Scanner(System.in);
 
     // Method for web interface to add paper
-    public void addPaper(QuestionPaper paper) {
+    public void addPaper(QuestionPaper paper) throws SQLException {
         dao.addPaper(paper);
     }
 
@@ -20,8 +21,8 @@ public class QuestionPaperService {
     }
 
     // Method for web interface to search papers
-    public List<QuestionPaper> search(String subject, int year, int semester) {
-        return dao.searchPaper(subject, year, semester);
+    public List<QuestionPaper> search(String subject, String academicYear, String examMonth, int year, int semester) throws SQLException {
+        return dao.searchPaper(subject, academicYear, examMonth, year, semester);
     }
 
     // Find a paper by its ID (returns null if not found)
@@ -36,6 +37,11 @@ public class QuestionPaperService {
     public void addPaper() {
         System.out.print("Enter Subject: ");
         String subject = sc.next();
+        System.out.print("Enter Academic Year (e.g., 2nd Year, 3rd Year): ");
+        sc.nextLine(); // consume newline
+        String academicYear = sc.nextLine();
+        System.out.print("Enter Exam Month (May or December): ");
+        String examMonth = sc.nextLine();
         System.out.print("Enter Year: ");
         int year = sc.nextInt();
         System.out.print("Enter Semester: ");
@@ -45,19 +51,34 @@ public class QuestionPaperService {
         System.out.print("Enter Status (AVAILABLE/NOT AVAILABLE): ");  //link this part when saved automatically updates status
         String status = sc.next();
 
-        QuestionPaper paper = new QuestionPaper(subject, year, sem, file, status);
-        dao.addPaper(paper);
+        QuestionPaper paper = new QuestionPaper(subject, academicYear, examMonth, year, sem, file, status);
+        try {
+            dao.addPaper(paper);
+        } catch (SQLException e) {
+            System.out.println("Error adding paper: " + e.getMessage());
+        }
     }
 
     public void searchPaper() {
         System.out.print("Enter Subject: ");
         String subject = sc.next();
+        System.out.print("Enter Academic Year (e.g., 2nd Year): ");
+        sc.nextLine(); // consume newline
+        String academicYear = sc.nextLine();
+        System.out.print("Enter Exam Month (May or December): ");
+        String examMonth = sc.nextLine();
         System.out.print("Enter Year: ");
         int year = sc.nextInt();
         System.out.print("Enter Semester: ");
         int sem = sc.nextInt();
 
-        List<QuestionPaper> papers = dao.searchPaper(subject, year, sem);
+        List<QuestionPaper> papers;
+        try {
+            papers = dao.searchPaper(subject, academicYear, examMonth, year, sem);
+        } catch (SQLException e) {
+            System.out.println("Error searching papers: " + e.getMessage());
+            return;
+        }
         if (papers.isEmpty()) {
             System.out.println("No papers found.");
         } else {

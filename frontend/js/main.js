@@ -56,17 +56,16 @@
             
             items.forEach(item => {
                 const tr = document.createElement('tr');
+                // Construct file link - filePath is relative to the PDF folder
                 const fileLink = `/pdf/${encodeURIComponent(item.filePath)}`;
                 tr.innerHTML = `
-                    <td>${item.id}</td>
                     <td>${item.subject}</td>
-                    <td>${item.year}</td>
+                    <td>${item.academicYear || 'N/A'}</td>
+                    <td>${item.examMonth || 'N/A'}</td>
                     <td>${item.semester}</td>
-                    <td>${item.status}</td>
                     <td><a href="${fileLink}" target="_blank" rel="noopener">${item.filePath}</a></td>
                     <td>
                         <button class="send-email-btn" data-id="${item.id}">Send to Email</button>
-                        <button class="delete-btn" data-id="${item.id}" style="margin-left:8px;color:#fff;background:#e74c3c;border:none;padding:6px 8px;border-radius:6px;">Delete</button>
                     </td>
                 `;
                 tbody.appendChild(tr);
@@ -185,59 +184,87 @@
         const form = document.getElementById('addPaperForm');
         if (!form) return;
         const info = document.getElementById('addInfo');
-        const fileInput = form.querySelector('input[name="fileName"]');
-
-        function isPdf(name) { return PDF_REGEX.test((name || '').trim()); }
+        const submitBtn = document.getElementById('submitBtn');
+        const fileInput = document.getElementById('pdfFile');
+        const fileInfo = document.getElementById('fileInfo');
+        
+        // Show file info when file is selected
         if (fileInput) {
-            fileInput.addEventListener('input', () => {
-                if (isPdf(fileInput.value)) {
-                    fileInput.setCustomValidity('');
-                } else {
-                    fileInput.setCustomValidity('Enter a file name ending with .pdf');
+            fileInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+                    if (fileInfo) {
+                        fileInfo.style.display = 'block';
+                        fileInfo.innerHTML = `<strong>✓ Selected:</strong> ${file.name} (${sizeMB} MB)`;
+                    }
+                    
+                    // Validate file size (10MB limit)
+                    if (file.size > 10485760) {
+                        alert('File size exceeds 10MB limit');
+                        fileInput.value = '';
+                        fileInfo.style.display = 'none';
+                    }
                 }
             });
         }
         
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const data = new FormData(form);
-            const paper = {
-                subject: data.get('subject').trim(),
-                year: Number(data.get('year')),
-                semester: Number(data.get('semester')),
-                filePath: data.get('fileName').trim(),
-                status: data.get('status')
-            };
             
-            if (!paper.subject || !paper.year || !paper.semester || !paper.filePath || !paper.status) return;
-            if (!isPdf(paper.filePath)) {
-                if (fileInput) {
-                    fileInput.setCustomValidity('Enter a file name ending with .pdf');
-                    fileInput.reportValidity();
-                }
+            // Get form data
+            const formData = new FormData(form);
+            
+            // Validate file is selected
+            const file = formData.get('pdfFile');
+            if (!file || file.size === 0) {
+                toast('Please select a PDF file');
                 return;
             }
             
+            // Show loading state
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.querySelector('.btn-text').style.display = 'none';
+                submitBtn.querySelector('.btn-loading').style.display = 'inline';
+            }
+            
             try {
-                const response = await fetch(`${API_BASE_URL}/add`, {
+                // Upload file with form data
+                const response = await fetch(`${API_BASE_URL}/upload`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(paper)
+                    body: formData
                 });
                 
                 if (!response.ok) {
-                    throw new Error('Failed to add paper');
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Upload failed');
                 }
                 
                 const result = await response.json();
-                if (info) info.textContent = `Added: ${result.subject} ${result.year} Sem ${result.semester}`;
-                toast('Paper added');
+                
+                if (info) {
+                    info.textContent = `✓ Paper uploaded successfully! File: ${result.filename}`;
+                    info.style.color = 'var(--accent)';
+                }
+                toast('✓ Paper uploaded successfully!');
                 form.reset();
+                if (fileInfo) fileInfo.style.display = 'none';
+                
             } catch (err) {
-                console.error('Failed to add paper:', err);
-                toast('Error adding paper');
+                console.error('Upload failed:', err);
+                if (info) {
+                    info.textContent = `✗ Error: ${err.message}`;
+                    info.style.color = '#e74c3c';
+                }
+                toast('✗ Upload failed');
+            } finally {
+                // Reset button state
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.querySelector('.btn-text').style.display = 'inline';
+                    submitBtn.querySelector('.btn-loading').style.display = 'none';
+                }
             }
         });
     }
@@ -254,12 +281,14 @@
             e.preventDefault();
             const data = new FormData(form);
             const subject = data.get('subject').trim();
+            const academicYear = data.get('academicYear');
+            const examMonth = data.get('examMonth');
             const year = Number(data.get('year'));
             const semester = Number(data.get('semester'));
             
             try {
                 const response = await fetch(
-                    `${API_BASE_URL}/search?subject=${encodeURIComponent(subject)}&year=${year}&semester=${semester}`
+                    `${API_BASE_URL}/search?subject=${encodeURIComponent(subject)}&academicYear=${encodeURIComponent(academicYear)}&examMonth=${encodeURIComponent(examMonth)}&year=${year}&semester=${semester}`
                 );
                 const results = await response.json();
                 
@@ -272,6 +301,8 @@
                     tr.innerHTML = `
                         <td>${item.id}</td>
                         <td>${item.subject}</td>
+                        <td>${item.academicYear || 'N/A'}</td>
+                        <td>${item.examMonth || 'N/A'}</td>
                         <td>${item.year}</td>
                         <td>${item.semester}</td>
                         <td>${item.status}</td>
@@ -296,10 +327,10 @@
         const exportBtn = document.getElementById('exportCsvBtn');
         if (exportBtn) {
             exportBtn.addEventListener('click', () => {
-                const rows = [['ID','Subject','Year','Semester','Status','File Name']];
+                const rows = [['ID','Subject','Academic Year','Exam Month','Year','Semester','Status','File Name']];
                 table.querySelectorAll('tbody tr').forEach(tr => {
                     const cols = Array.from(tr.children).map(td => td.textContent || '');
-                    rows.push(cols);
+                    rows.push(cols.slice(0, -1)); // Exclude the last column (Send button)
                 });
                 const csv = rows.map(r => r.map(v => '"' + v.replaceAll('"', '""') + '"').join(',')).join('\n');
                 const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });

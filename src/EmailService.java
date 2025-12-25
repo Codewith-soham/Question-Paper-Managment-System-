@@ -19,7 +19,7 @@ public class EmailService {
     
     private static final String SMTP_PASS = System.getenv("SMTP_PASS") != null
             ? System.getenv("SMTP_PASS")
-            : "xjhvnwmhgynhqbfq";
+            : "vfjlwyrocowwhgqx";
     
     private static final String PDF_BASE_DIR = "PDF";
     

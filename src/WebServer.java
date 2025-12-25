@@ -14,11 +14,25 @@ import java.io.InputStreamReader;
 import java.util.stream.Collectors;
 
 public class WebServer {
-    private static final int PORT = 8080;
+    private static int PORT;
     private static final ObjectMapper objectMapper = new ObjectMapper();
     private static final QuestionPaperService service = new QuestionPaperService();
 
     public static void main(String[] args) throws IOException {
+        // Load configuration
+        System.out.println("========================================");
+        System.out.println("Question Paper Management System v2.0");
+        System.out.println("========================================");
+        
+        ConfigManager.loadConfig();
+        PORT = ConfigManager.getServerPort();
+        
+        // Initialize database connection pool
+        DatabaseConnection.initialize();
+        
+        // Create upload directory if not exists
+        Files.createDirectories(Paths.get(ConfigManager.getUploadDirectory()));
+        
         HttpServer server = HttpServer.create(new InetSocketAddress(PORT), 0);
         
         // Serve static files from frontend directory
@@ -26,12 +40,26 @@ public class WebServer {
         // Serve PDF files from project PDF directory
         server.createContext("/pdf", pdfFileHandler());
         
-    // Handle /papers routing (list, add, send email)
+    // Handle /papers routing (list, add, send email, upload)
     server.createContext("/papers", routePapersHandler());
+        
+        // Add shutdown hook
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            System.out.println("\nShutting down server...");
+            server.stop(0);
+            DatabaseConnection.shutdown();
+            System.out.println("✓ Server stopped gracefully");
+        }));
         
         server.setExecutor(null);
         server.start();
-        System.out.println("Server started on port " + PORT);
+        
+        System.out.println("========================================");
+        System.out.println("✓ Server started successfully!");
+        System.out.println("  URL: http://localhost:" + PORT);
+        System.out.println("  Dashboard: http://localhost:" + PORT + "/frontend/index.html");
+        System.out.println("  Upload Dir: " + ConfigManager.getUploadDirectory());
+        System.out.println("========================================");
     }
 
     private static HttpHandler getAllPapersHandler() {
@@ -53,34 +81,36 @@ public class WebServer {
             }
 
             try {
-                String requestPath = exchange.getRequestURI().getPath(); // e.g. /pdf/filename.pdf
-                String fileName = requestPath.substring("/pdf".length());
-                if (fileName.isEmpty() || "/".equals(fileName)) {
+                String requestPath = exchange.getRequestURI().getPath(); // e.g. /pdf/2025/file.pdf
+                String relativePath = requestPath.substring("/pdf".length());
+                if (relativePath.isEmpty() || "/".equals(relativePath)) {
                     exchange.sendResponseHeaders(400, -1);
                     return;
                 }
 
-                // Normalize and ensure we only serve by filename to prevent path traversal
-                fileName = fileName.replace("\\", "/");
-                if (fileName.startsWith("/")) fileName = fileName.substring(1);
-                int slash = fileName.lastIndexOf('/');
-                if (slash != -1) fileName = fileName.substring(slash + 1);
+                // Normalize path to prevent traversal and allow subfolders
+                relativePath = relativePath.replace("\\", "/");
+                if (relativePath.startsWith("/")) relativePath = relativePath.substring(1);
 
-                // Candidate locations for PDF directory (project root vs running from src/)
-                String userDir = System.getProperty("user.dir");
-                File[] candidates = new File[] {
-                    new File(userDir + File.separator + "PDF" + File.separator + fileName),
-                    new File(userDir + File.separator + ".." + File.separator + "PDF" + File.separator + fileName),
-                    new File("PDF" + File.separator + fileName)
-                };
+                Path baseDir = Paths.get(ConfigManager.getUploadDirectory()).toAbsolutePath().normalize();
+                Path targetPath = baseDir.resolve(relativePath).normalize();
 
-                File pdfFile = null;
-                for (File f : candidates) {
-                    if (f.exists() && f.isFile()) { pdfFile = f; break; }
+                // Debug logging
+                System.out.println("[PDF Handler] Request: " + requestPath);
+                System.out.println("[PDF Handler] Relative: " + relativePath);
+                System.out.println("[PDF Handler] Base Dir: " + baseDir);
+                System.out.println("[PDF Handler] Target: " + targetPath);
+
+                // Block path traversal attempts
+                if (!targetPath.startsWith(baseDir)) {
+                    exchange.sendResponseHeaders(403, -1);
+                    return;
                 }
 
-                if (pdfFile == null) {
-                    String notFound = "PDF not found";
+                File pdfFile = targetPath.toFile();
+                if (!pdfFile.exists() || !pdfFile.isFile()) {
+                    String notFound = "PDF not found: " + pdfFile.getAbsolutePath();
+                    System.err.println("[PDF Handler] " + notFound);
                     exchange.sendResponseHeaders(404, notFound.length());
                     try (OutputStream os = exchange.getResponseBody()) {
                         os.write(notFound.getBytes(StandardCharsets.UTF_8));
@@ -89,6 +119,7 @@ public class WebServer {
                 }
 
                 // Serve inline as application/pdf
+                String fileName = pdfFile.getName();
                 exchange.getResponseHeaders().set("Content-Type", "application/pdf");
                 exchange.getResponseHeaders().set("Content-Disposition", "inline; filename=\"" + fileName + "\"");
                 exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
@@ -124,6 +155,8 @@ public class WebServer {
                     Map<String, Object> data = objectMapper.readValue(body, Map.class);
                     QuestionPaper paper = new QuestionPaper(
                         (String) data.get("subject"),
+                        (String) data.get("academicYear"),
+                        (String) data.get("examMonth"),
                         ((Number) data.get("year")).intValue(),
                         ((Number) data.get("semester")).intValue(),
                         (String) data.get("filePath"),
@@ -234,6 +267,8 @@ public class WebServer {
                     Map<String, Object> data = objectMapper.readValue(body, Map.class);
                     QuestionPaper paper = new QuestionPaper(
                         (String) data.get("subject"),
+                        (String) data.get("academicYear"),
+                        (String) data.get("examMonth"),
                         ((Number) data.get("year")).intValue(),
                         ((Number) data.get("semester")).intValue(),
                         (String) data.get("filePath"),
@@ -244,7 +279,7 @@ public class WebServer {
                     return;
                 }
 
-                // GET /papers/search?subject=...&year=...&semester=...
+                // GET /papers/search?subject=...&academicYear=...&examMonth=...&year=...&semester=...
                 if ("GET".equalsIgnoreCase(method) && path.equals("/papers/search")) {
                     String query = exchange.getRequestURI().getQuery();
                     Map<String, String> params = new HashMap<>();
@@ -258,17 +293,19 @@ public class WebServer {
                     }
 
                     String subject = params.getOrDefault("subject", "").trim();
+                    String academicYear = params.getOrDefault("academicYear", "").trim();
+                    String examMonth = params.getOrDefault("examMonth", "").trim();
                     String yearStr = params.getOrDefault("year", "").trim();
                     String semStr = params.getOrDefault("semester", "").trim();
 
-                    if (subject.isEmpty() || yearStr.isEmpty() || semStr.isEmpty()) {
-                        sendResponse(exchange, 400, "{\"error\": \"subject, year, and semester are required\"}");
+                    if (subject.isEmpty() || academicYear.isEmpty() || examMonth.isEmpty() || yearStr.isEmpty() || semStr.isEmpty()) {
+                        sendResponse(exchange, 400, "{\"error\": \"subject, academicYear, examMonth, year, and semester are required\"}");
                         return;
                     }
 
                     int year = Integer.parseInt(yearStr);
                     int semester = Integer.parseInt(semStr);
-                    String response = objectMapper.writeValueAsString(service.search(subject, year, semester));
+                    String response = objectMapper.writeValueAsString(service.search(subject, academicYear, examMonth, year, semester));
                     sendResponse(exchange, 200, response);
                     return;
                 }
@@ -304,6 +341,78 @@ public class WebServer {
                     if (ok) sendResponse(exchange, 200, "{\"message\": \"Email sent\"}");
                     else sendResponse(exchange, 500, "{\"error\": \"Failed to send email\"}");
                     return;
+                }
+
+                // POST /papers/upload -> upload PDF with form data
+                if ("POST".equalsIgnoreCase(method) && path.equals("/papers/upload")) {
+                    try {
+                        // Parse multipart form data
+                        Map<String, Object> uploadData = FileUploadHandler.parseMultipartFormData(exchange);
+                        Map<String, String> formFields = (Map<String, String>) uploadData.get("formFields");
+                        
+                        // Validate required fields
+                        if (!formFields.containsKey("subject") || !formFields.containsKey("academicYear") ||
+                            !formFields.containsKey("examMonth") || !formFields.containsKey("year") ||
+                            !formFields.containsKey("semester") || !formFields.containsKey("status")) {
+                            sendResponse(exchange, 400, "{\"error\": \"Missing required fields\"}");
+                            return;
+                        }
+                        
+                        // Check if file was uploaded
+                        if (!uploadData.containsKey("filedata")) {
+                            sendResponse(exchange, 400, "{\"error\": \"No file uploaded\"}");
+                            return;
+                        }
+                        
+                        // Create QuestionPaper object (temporary, will update filepath after save)
+                        QuestionPaper paper = new QuestionPaper(
+                            formFields.get("subject"),
+                            formFields.get("academicYear"),
+                            formFields.get("examMonth"),
+                            Integer.parseInt(formFields.get("year")),
+                            Integer.parseInt(formFields.get("semester")),
+                            "", // Will be set after file save
+                            formFields.get("status")
+                        );
+                        
+                        // Save uploaded file
+                        byte[] fileData = (byte[]) uploadData.get("filedata");
+                        String originalFilename = (String) uploadData.get("filename");
+                        String savedFilepath = FileUploadHandler.saveUploadedFile(fileData, originalFilename, paper);
+                        
+                        // Update paper with saved filepath
+                        QuestionPaper finalPaper = new QuestionPaper(
+                            paper.getSubject(),
+                            paper.getAcademicYear(),
+                            paper.getExamMonth(),
+                            paper.getYear(),
+                            paper.getSemester(),
+                            savedFilepath,
+                            paper.getStatus()
+                        );
+                        
+                        // Add to database
+                        service.addPaper(finalPaper);
+                        
+                        Map<String, Object> responseData = new HashMap<>();
+                        responseData.put("message", "Paper uploaded successfully");
+                        responseData.put("filename", savedFilepath);
+                        responseData.put("size", uploadData.get("filesize"));
+                        
+                        sendResponse(exchange, 200, objectMapper.writeValueAsString(responseData));
+                        return;
+                        
+                    } catch (IOException e) {
+                        System.err.println("Upload error: " + e.getMessage());
+                        e.printStackTrace();
+                        sendResponse(exchange, 400, "{\"error\": \"" + e.getMessage() + "\"}");
+                        return;
+                    } catch (Exception e) {
+                        System.err.println("Upload error: " + e.getMessage());
+                        e.printStackTrace();
+                        sendResponse(exchange, 500, "{\"error\": \"Upload failed: " + e.getMessage() + "\"}");
+                        return;
+                    }
                 }
 
                 // DELETE /papers/{id} -> delete a paper

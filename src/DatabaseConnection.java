@@ -1,23 +1,37 @@
-//Connecting database to java
-
+// Database Connection - Now uses HikariCP connection pooling for better performance
+// This class maintains backward compatibility while using the new pool
 
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.SQLException;
 
 public class DatabaseConnection {
-    private static final String URL = "jdbc:mysql://localhost:3306/questionpaper";
-    private static final String USER = "root";
-    private static final String PASSWORD = "soham1234";
-
-    public static Connection getConnection() {
-        Connection conn = null;
-        try {
-            Class.forName("com.mysql.cj.jdbc.Driver");
-            conn = DriverManager.getConnection(URL, USER, PASSWORD);
-        } catch (ClassNotFoundException | SQLException e) {
-            e.printStackTrace();
-        }
-        return conn;
+    
+    /**
+     * Get database connection from the connection pool
+     * Uses HikariCP for efficient connection management
+     */
+    public static Connection getConnection() throws SQLException {
+        return DatabaseConnectionPool.getConnection();
+    }
+    
+    /**
+     * Initialize the connection pool (call at application startup)
+     */
+    public static void initialize() {
+        DatabaseConnectionPool.initialize();
+    }
+    
+    /**
+     * Shutdown connection pool (call at application shutdown)
+     */
+    public static void shutdown() {
+        DatabaseConnectionPool.shutdown();
+    }
+    
+    /**
+     * Check if database connection is healthy
+     */
+    public static boolean isHealthy() {
+        return DatabaseConnectionPool.isHealthy();
     }
 }

@@ -6,6 +6,8 @@ USE questionpaper;
 CREATE TABLE IF NOT EXISTS question_paper (
     id INT AUTO_INCREMENT PRIMARY KEY,
     subject VARCHAR(100) NOT NULL,
+    academic_year VARCHAR(20) NOT NULL,
+    exam_month VARCHAR(20) NOT NULL,
     year INT NOT NULL,
     semester INT NOT NULL,
     file_path VARCHAR(255) NOT NULL,
@@ -14,4 +16,4 @@ CREATE TABLE IF NOT EXISTS question_paper (
 );
 
 -- Add any indexes
-CREATE INDEX idx_subject_year_sem ON question_paper(subject, year, semester);
+CREATE INDEX idx_subject_year_sem ON question_paper(subject, academic_year, exam_month, year, semester);
